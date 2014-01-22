@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+set -e            # fail fast
+set -o pipefail   # don't ignore exit codes when piping output
+# set -x          # enable debugging
+
+# Configure directories
+app_root=$(cd $(dirname $0); cd ..; pwd)
+
+# Load some convenience functions like status(), echo(), and indent()
+source $app_root/provisioning/tasks/common.sh
+
+status "Configuring development environment"
+source $app_root/provisioning/tasks/install_epel.sh 2>&1 | indent
+source $app_root/provisioning/tasks/dev_tools.sh    2>&1 | indent
+
+status "Downloading and installing ruby"
+source $app_root/provisioning/tasks/install_ruby.sh 2>&1 | indent
+
+status "Installing nginx"
+source $app_root/provisioning/tasks/install_nginx.sh 2>&1 | indent
+
+status "Configuring application nginx servers"
+cp $app_root/provisioning/files/nginx_server.conf \
+  /etc/nginx/conf.d/myapp.conf 2>&1 | indent
+
+cd $app_root
+
+status "Installing application dependencies"
+source ~/.bash_profile
+rbenv rehash
+
+echo $PATH
+bundle install --binstubs 2>&1 | indent
+
+status "Starting applications"
+rm -f ./tmp/pids/thin.pid  >/dev/null 2>&1 | indent
+./bin/foreman start  2>&1 | indent
+
+status "Restarting affected services"
+service nginx restart 2>&1 | indent
